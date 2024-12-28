@@ -12,6 +12,8 @@ import matplotlib.pyplot as plt
 from shapely.geometry import Polygon, Point
 import matplotlib
 from matplotlib.cm import get_cmap
+import streamlit.components.v1 as components
+
 
 def geocode_address(address, geolocator):
     """Geocodes an address using Nominatim with retry logic."""
@@ -156,14 +158,12 @@ def main():
                   for _, row in df_mapped.iterrows():
                       folium.Marker([row['latitude'], row['longitude']], popup=row[address_column]).add_to(m)
                   
-                  st_folium = folium.folium_static(m)
-                  st.components.v1.html(st_folium._repr_html_(), height=450, width = 800)
+                  st.components.v1.html(m._repr_html_(), height=450, width = 800)
                 
                   # Create a heatmap
                   st.subheader("Merchant Density")
                   heatmap = create_heatmap(df_mapped)
-                  st_folium_heat = folium.folium_static(heatmap)
-                  st.components.v1.html(st_folium_heat._repr_html_(), height=450, width = 800)
+                  st.components.v1.html(heatmap._repr_html_(), height=450, width = 800)
                   
                   # Plot unplotted areas
                   st.subheader("Unplotted area")
