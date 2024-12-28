@@ -99,51 +99,9 @@ def main():
                     lat, lng = geocode_address(address, city, geolocator, state, postal_code, all_cities = all_cities)
                     geocoded_results.append((lat, lng))
                   df['latitude'], df['longitude'] = zip(*geocoded_results)
-                  
-                # Handle un-geocoded locations
-                df_unmapped = df[df['latitude'].isna()]
-                if not df_unmapped.empty:
-                   st.error("The following addresses could not be geocoded and will not be displayed on the map:")
-                   st.dataframe(df_unmapped)
-                 
-                # Filter for successfully geocoded locations
-                df_mapped = df.dropna(subset=['latitude', 'longitude'])
-                if df_mapped.empty:
-                  st.warning("No addresses could be geocoded. Please check address data")
-                else:
-                  st.success("Geocoding complete!")
-                  st.write("Data with Coordinates:")
-                  st.dataframe(df.head())
+                  print(df.head()) # New line to print dataframe
 
-                  #st.subheader("Merchant Map") #commented out
-                  #min_lat = df_mapped['latitude'].min() #commented out
-                  #max_lat = df_mapped['latitude'].max() #commented out
-                  #min_lng = df_mapped['longitude'].min() #commented out
-                  #max_lng = df_mapped['longitude'].max() #commented out
-
-                  ## Define the boundary polygon for the mapping #commented out
-                  #coords = [[min_lng,min_lat],[min_lng,max_lat],[max_lng,max_lat],[max_lng,min_lat],[min_lng,min_lat]] #commented out
-                  #boundary_polygon = Polygon(coords) #commented out
-                 
-                  ## Create the folium map #commented out
-                  #m = folium.Map(location=[df_mapped['latitude'].mean(), df_mapped['longitude'].mean()], zoom_start=10) #commented out
-                  #for _, row in df_mapped.iterrows(): #commented out
-                  #    folium.Marker([row['latitude'], row['longitude']], popup=row[address_column]).add_to(m) #commented out
                   
-                  # Use folium.folium_static #commented out
-                  #st_folium = folium.folium_static(m) #commented out
-                  #st.components.v1.html(st_folium._repr_html_(), height=450, width = 800) #commented out
-                
-                  # Create a heatmap #commented out
-                  #st.subheader("Merchant Density") #commented out
-                  #heatmap = create_heatmap(df_mapped) #commented out
-                  #st_folium_heat = folium.folium_static(heatmap) #commented out
-                  #st.components.v1.html(st_folium_heat._repr_html_(), height=450, width = 800) #commented out
-                  
-                  # Plot unplotted areas #commented out
-                  #st.subheader("Unplotted area") #commented out
-                  #unplotted_fig = plot_unplotted_areas(df_mapped, boundary_polygon, min_lat, max_lat, min_lng, max_lng) #commented out
-                  #st.pyplot(unplotted_fig) #commented out
         
         except Exception as e:
             st.error(f"Error processing file: {e}")
