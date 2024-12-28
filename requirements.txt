@@ -1,5 +1,9 @@
 streamlit
 pandas
-plotly
 geopy
-openpyxl
+folium
+geopandas
+scipy
+numpy
+matplotlib
+shapely
