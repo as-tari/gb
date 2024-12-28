@@ -32,40 +32,38 @@ def correct_typo(text, choices, threshold=70):
         return best_match
     return text
 
-def geocode_address(address, city, geolocator, state=None, postal_code=None, max_retries=3):
-    """Geocodes an address with retry logic and optional city, state, and postal code."""
+def geocode_address(address, city, geolocator, state=None, postal_code=None, max_retries=3, all_cities = None):
+    """Geocodes an address with retry logic and multiple fallback strategies."""
+
+    strategies = [
+        ("Full Address", lambda a, c, s, pc: f"{a}, {c}{f', {s}' if s else ''}{f', {pc}' if pc else ''}"),
+        ("City Only", lambda a, c, s, pc: f"{c}{f', {s}' if s else ''}{f', {pc}' if pc else ''}"),
+        ("City + Postal Code", lambda a, c, s, pc: f"{c}{f', {pc}' if pc else ''}" if pc else None), #Postal Code
+        ("City + State", lambda a, c, s, pc: f"{c}, {s}" if s else None) #State
+
+    ]
 
     for retry in range(max_retries):
-      try:
-        full_address = f"{address}, {city}"
-        if state:
-           full_address = f"{full_address}, {state}"
-        if postal_code:
-          full_address = f"{full_address}, {postal_code}"
-        full_address = clean_address(full_address)
-        location = geolocator.geocode(full_address, timeout=10)
+        for name, strategy_func in strategies:
+           try:
+               full_address = strategy_func(address, city, state, postal_code)
+               if not full_address:
+                  continue
+               
+               full_address = clean_address(full_address)
+               if all_cities:
+                  full_address = correct_typo(full_address, all_cities)
 
-        if location:
-            return location.latitude, location.longitude
-        else:
-          # Try without the street name
-            full_address = f"{city}"
-            if state:
-               full_address = f"{full_address}, {state}"
-            if postal_code:
-                full_address = f"{full_address}, {postal_code}"
-            full_address = clean_address(full_address)
-            location = geolocator.geocode(full_address, timeout=10)
-            if location:
-              return location.latitude, location.longitude
-
-      except (GeocoderTimedOut, GeocoderServiceError) as e:
-          print(f"Geocoding error for address '{full_address}': {e}. Retrying ({retry + 1}/{max_retries}) after a delay.")
-          time.sleep(5)
-          continue
-      except Exception as e:
-          print(f"Geocoding error for address '{full_address}': {e}. Skipping address.")
-          break
+               location = geolocator.geocode(full_address, timeout=10)
+               if location:
+                  print(f"Geocoded using strategy '{name}': {full_address}")
+                  return location.latitude, location.longitude
+           except (GeocoderTimedOut, GeocoderServiceError) as e:
+               print(f"Geocoding error with strategy '{name}': {e}. Retrying ({retry + 1}/{max_retries}) after a delay.")
+               time.sleep(5)
+           except Exception as e:
+               print(f"Geocoding error with strategy '{name}': {e}.")
+               continue
     
     print(f"Failed to geocode address: {address}, {city}")
     return None, None
@@ -179,14 +177,12 @@ def main():
                     city = row[city_column]
                     address = row[address_column]
                     
-                    # Try to fix address typos
-                    address = correct_typo(address, [address], threshold=80)
                     #Try to fix city typos
                     city = correct_typo(city, all_cities)
                     
                     state = row[state_column] if state_column != 'None' else None
                     postal_code = row[postal_code_column] if postal_code_column != 'None' else None
-                    lat, lng = geocode_address(address, city, geolocator, state, postal_code)
+                    lat, lng = geocode_address(address, city, geolocator, state, postal_code, all_cities = all_cities)
                     geocoded_results.append((lat, lng))
                   df['latitude'], df['longitude'] = zip(*geocoded_results)
                   
