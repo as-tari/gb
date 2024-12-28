@@ -12,7 +12,7 @@ import matplotlib.pyplot as plt
 from shapely.geometry import Polygon, Point
 import matplotlib
 from matplotlib.cm import get_cmap
-import streamlit.components.v1 as components
+import streamlit.components as components # Corrected Import
 
 
 def geocode_address(address, city, geolocator):
@@ -160,12 +160,12 @@ def main():
                   for _, row in df_mapped.iterrows():
                       folium.Marker([row['latitude'], row['longitude']], popup=row[address_column]).add_to(m)
                   
-                  components.v1.html(m._repr_html_(), height=450, width = 800)
+                  components.html(m._repr_html_(), height=450, width = 800)
                 
                   # Create a heatmap
                   st.subheader("Merchant Density")
                   heatmap = create_heatmap(df_mapped)
-                  components.v1.html(heatmap._repr_html_(), height=450, width = 800)
+                  components.html(heatmap._repr_html_(), height=450, width = 800)
                   
                   # Plot unplotted areas
                   st.subheader("Unplotted area")
