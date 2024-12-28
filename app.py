@@ -2,9 +2,12 @@ import streamlit as st
 import pandas as pd
 from geopy.geocoders import Nominatim
 from geopy.exc import GeocoderTimedOut, GeocoderServiceError
+import folium
 import time
 import re
 from fuzzywuzzy import process, fuzz
+from folium.plugins import HeatMap
+from shapely.geometry import Polygon
 
 def clean_address(address):
     """Cleans up the address string by removing unnecessary punctuations and spaces."""
@@ -22,41 +25,35 @@ def correct_typo(text, choices, threshold=70):
         return best_match
     return text
 
-def geocode_address(address, city, geolocator, state=None, postal_code=None, max_retries=3, all_cities = None):
-    """Geocodes an address with retry logic and multiple fallback strategies."""
-
-    strategies = [
-        ("Full Address", lambda a, c, s, pc: f"{a}, {c}{f', {s}' if s else ''}{f', {pc}' if pc else ''}"),
-        ("City Only", lambda a, c, s, pc: f"{c}{f', {s}' if s else ''}{f', {pc}' if pc else ''}"),
-        ("City + Postal Code", lambda a, c, s, pc: f"{c}{f', {pc}' if pc else ''}" if pc else None), #Postal Code
-        ("City + State", lambda a, c, s, pc: f"{c}, {s}" if s else None) #State
-
-    ]
+def geocode_address(address, city, geolocator, state=None, postal_code=None, max_retries=3):
+    """Geocodes an address with retry logic."""
+    full_address = f"{address}, {city}"
+    if state:
+        full_address += f", {state}"
+    if postal_code:
+      full_address += f", {postal_code}"
+    full_address = clean_address(full_address)
 
     for retry in range(max_retries):
-        for name, strategy_func in strategies:
-           try:
-               full_address = strategy_func(address, city, state, postal_code)
-               if not full_address:
-                  continue
-               
-               full_address = clean_address(full_address)
-               if all_cities:
-                  full_address = correct_typo(full_address, all_cities)
-
-               location = geolocator.geocode(full_address, timeout=10)
-               if location:
-                  print(f"Geocoded using strategy '{name}': {full_address}")
-                  return location.latitude, location.longitude
-           except (GeocoderTimedOut, GeocoderServiceError) as e:
-               print(f"Geocoding error with strategy '{name}': {e}. Retrying ({retry + 1}/{max_retries}) after a delay.")
-               time.sleep(5)
-           except Exception as e:
-               print(f"Geocoding error with strategy '{name}': {e}.")
-               continue
-    
-    print(f"Failed to geocode address: {address}, {city}")
+      try:
+        location = geolocator.geocode(full_address, timeout=10)
+        if location:
+          return location.latitude, location.longitude
+      except (GeocoderTimedOut, GeocoderServiceError) as e:
+          print(f"Geocoding error for address '{full_address}': {e}. Retrying ({retry + 1}/{max_retries}) after a delay.")
+          time.sleep(5)
+    print(f"Failed to geocode address: {full_address}")
     return None, None
+
+
+def create_heatmap(df):
+    """
+    Generates a heatmap
+    """
+    heat_data = df[['latitude', 'longitude']].dropna().values.tolist()
+    m = folium.Map(location=[df['latitude'].mean(), df['longitude'].mean()], zoom_start=10, tiles="cartodbdarkmatter")
+    HeatMap(heat_data).add_to(m)
+    return m
 
 def main():
     st.title("Merchant Location Mapper")
@@ -75,7 +72,6 @@ def main():
 
             address_column = st.selectbox("Select Address Column", df.columns)
             city_column = st.selectbox("Select City Column", df.columns)
-            
             state_column = st.selectbox("Select State Column (Optional)", ['None'] + list(df.columns))
             postal_code_column = st.selectbox("Select Postal Code Column (Optional)", ['None'] + list(df.columns))
 
@@ -87,22 +83,53 @@ def main():
                   # Geocode addresses and add lat/long columns
                   geocoded_results = []
                   all_cities = df[city_column].dropna().unique().tolist() # Get all unique cities for typo checking
+
                   for index, row in df.iterrows():
                     city = row[city_column]
                     address = row[address_column]
-                    
-                    #Try to fix city typos
+                     #Try to fix city typos
                     city = correct_typo(city, all_cities)
-                    
                     state = row[state_column] if state_column != 'None' else None
                     postal_code = row[postal_code_column] if postal_code_column != 'None' else None
-                    lat, lng = geocode_address(address, city, geolocator, state, postal_code, all_cities = all_cities)
+                    lat, lng = geocode_address(address, city, geolocator, state, postal_code)
                     geocoded_results.append((lat, lng))
-                  df['latitude'], df['longitude'] = zip(*geocoded_results)
-                  print(df.head()) # New line to print dataframe
 
+                  df['latitude'], df['longitude'] = zip(*geocoded_results)
+
+                # Handle un-geocoded locations
+                df_unmapped = df[df['latitude'].isna()]
+                if not df_unmapped.empty:
+                   st.error("The following addresses could not be geocoded and will not be displayed on the map:")
+                   st.dataframe(df_unmapped)
+
+                # Filter for successfully geocoded locations
+                df_mapped = df.dropna(subset=['latitude', 'longitude'])
+                if df_mapped.empty:
+                  st.warning("No addresses could be geocoded. Please check address data")
+                else:
+                  st.success("Geocoding complete!")
+                  st.write("Data with Coordinates:")
+                  st.dataframe(df.head())
+
+                  st.subheader("Merchant Map")
+
+                  # Create the base map
+                  m = folium.Map(location=[df_mapped['latitude'].mean(), df_mapped['longitude'].mean()], zoom_start=10)
+
+                  # Plot points as markers
+                  for _, row in df_mapped.iterrows():
+                      folium.Marker([row['latitude'], row['longitude']], popup=row[address_column]).add_to(m)
                   
-        
+                  # Display the map
+                  st_folium = folium.folium_static(m)
+                  st.components.v1.html(st_folium._repr_html_(), height=450, width = 800)
+                
+                  # Create a heatmap
+                  st.subheader("Merchant Density")
+                  heatmap = create_heatmap(df_mapped)
+                  st_folium_heat = folium.folium_static(heatmap)
+                  st.components.v1.html(st_folium_heat._repr_html_(), height=450, width = 800)
+
         except Exception as e:
             st.error(f"Error processing file: {e}")
 
