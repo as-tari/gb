@@ -217,17 +217,15 @@ def main():
                   for _, row in df_mapped.iterrows():
                       folium.Marker([row['latitude'], row['longitude']], popup=row[address_column]).add_to(m)
                   
-                  # Corrected calls to components.html
-                  html_map = m._repr_html_()
-                  print(html_map) #This is new line
-                  components.html(html_map, height=450, width = 800)
+                  # Use folium.folium_static
+                  st_folium = folium.folium_static(m)
+                  st.components.v1.html(st_folium._repr_html_(), height=450, width = 800)
                 
                   # Create a heatmap
                   st.subheader("Merchant Density")
                   heatmap = create_heatmap(df_mapped)
-                  html_heat = heatmap._repr_html_() #This is new line
-                  print(html_heat) #This is new line
-                  components.html(html_heat, height=450, width = 800)
+                  st_folium_heat = folium.folium_static(heatmap)
+                  st.components.v1.html(st_folium_heat._repr_html_(), height=450, width = 800)
                   
                   # Plot unplotted areas
                   st.subheader("Unplotted area")
