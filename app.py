@@ -217,6 +217,7 @@ def main():
                   for _, row in df_mapped.iterrows():
                       folium.Marker([row['latitude'], row['longitude']], popup=row[address_column]).add_to(m)
                   
+                  # Corrected calls to components.html
                   components.html(m._repr_html_(), height=450, width = 800)
                 
                   # Create a heatmap
