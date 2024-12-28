@@ -218,12 +218,16 @@ def main():
                       folium.Marker([row['latitude'], row['longitude']], popup=row[address_column]).add_to(m)
                   
                   # Corrected calls to components.html
-                  components.html(m._repr_html_(), height=450, width = 800)
+                  html_map = m._repr_html_()
+                  print(html_map) #This is new line
+                  components.html(html_map, height=450, width = 800)
                 
                   # Create a heatmap
                   st.subheader("Merchant Density")
                   heatmap = create_heatmap(df_mapped)
-                  components.html(heatmap._repr_html_(), height=450, width = 800)
+                  html_heat = heatmap._repr_html_() #This is new line
+                  print(html_heat) #This is new line
+                  components.html(html_heat, height=450, width = 800)
                   
                   # Plot unplotted areas
                   st.subheader("Unplotted area")
