@@ -15,24 +15,49 @@ from matplotlib.cm import get_cmap
 import streamlit.components as components
 import re
 
+def clean_address(address):
+    """Cleans up the address string by removing unnecessary punctuations and spaces."""
+    address = re.sub(r'[^\w\s,]', '', address)  # Remove all punctuation except commas
+    address = ' '.join(address.split())  # Remove extra whitespace
+    return address
 
-def geocode_address(address, city, geolocator):
-    """Geocodes an address using Nominatim with retry logic."""
-    
-    try:
+def geocode_address(address, city, geolocator, state=None, postal_code=None, max_retries=3):
+    """Geocodes an address with retry logic and optional city, state, and postal code."""
+
+    for retry in range(max_retries):
+      try:
         full_address = f"{address}, {city}"
-        full_address = re.sub(r'[^\w\s,]', '', full_address) #remove punctuation
+        if state:
+           full_address = f"{full_address}, {state}"
+        if postal_code:
+          full_address = f"{full_address}, {postal_code}"
+        full_address = clean_address(full_address)
         location = geolocator.geocode(full_address, timeout=10)
+
         if location:
             return location.latitude, location.longitude
-        return None, None
-    except (GeocoderTimedOut, GeocoderServiceError) as e:
-        print(f"Geocoding error for address '{full_address}': {e}. Retrying after a delay.")
-        time.sleep(5)
-        return geocode_address(address, city, geolocator)
-    except Exception as e:
-        print(f"Geocoding error for address '{full_address}': {e}. Skipping address.")
-        return None, None
+        else:
+          # Try without the street name
+            full_address = f"{city}"
+            if state:
+               full_address = f"{full_address}, {state}"
+            if postal_code:
+                full_address = f"{full_address}, {postal_code}"
+            full_address = clean_address(full_address)
+            location = geolocator.geocode(full_address, timeout=10)
+            if location:
+              return location.latitude, location.longitude
+
+      except (GeocoderTimedOut, GeocoderServiceError) as e:
+          print(f"Geocoding error for address '{full_address}': {e}. Retrying ({retry + 1}/{max_retries}) after a delay.")
+          time.sleep(5)
+          continue
+      except Exception as e:
+          print(f"Geocoding error for address '{full_address}': {e}. Skipping address.")
+          break
+    
+    print(f"Failed to geocode address: {address}, {city}")
+    return None, None
     
 def create_voronoi_polygons(points):
   """
@@ -128,31 +153,37 @@ def main():
             address_column = st.selectbox("Select Address Column", df.columns)
             city_column = st.selectbox("Select City Column", df.columns)
             
-            if st.button("Process Data & Map"):
+            state_column = st.selectbox("Select State Column (Optional)", ['None'] + list(df.columns))
+            postal_code_column = st.selectbox("Select Postal Code Column (Optional)", ['None'] + list(df.columns))
 
+            if st.button("Process Data & Map"):
                 # Initialize geolocator
                 geolocator = Nominatim(user_agent="merchant_mapper_app", timeout=10)
 
-                # Geocode addresses and add lat/long columns
                 with st.spinner("Geocoding addresses..."):
-                    df['latitude'], df['longitude'] = zip(*df.apply(lambda row: geocode_address(row[address_column], row[city_column], geolocator), axis=1))
-
-                st.success("Geocoding complete!")
-                
+                  # Geocode addresses and add lat/long columns
+                  geocoded_results = []
+                  for index, row in df.iterrows():
+                    state = row[state_column] if state_column != 'None' else None
+                    postal_code = row[postal_code_column] if postal_code_column != 'None' else None
+                    lat, lng = geocode_address(row[address_column], row[city_column], geolocator, state, postal_code)
+                    geocoded_results.append((lat, lng))
+                  df['latitude'], df['longitude'] = zip(*geocoded_results)
+                  
                 # Handle un-geocoded locations
                 df_unmapped = df[df['latitude'].isna()]
                 if not df_unmapped.empty:
-                  st.warning("The following addresses could not be geocoded:")
-                  st.dataframe(df_unmapped)
-                
-                st.write("Data with Coordinates:")
-                st.dataframe(df.head())
-
-                # Filter for successful geocoded locations
-                df_mapped = df.dropna(subset=['latitude','longitude'])
-                
-                # Create map
-                if not df_mapped.empty:
+                   st.error("The following addresses could not be geocoded and will not be displayed on the map:")
+                   st.dataframe(df_unmapped)
+                 
+                # Filter for successfully geocoded locations
+                df_mapped = df.dropna(subset=['latitude', 'longitude'])
+                if df_mapped.empty:
+                  st.warning("No addresses could be geocoded. Please check address data")
+                else:
+                  st.success("Geocoding complete!")
+                  st.write("Data with Coordinates:")
+                  st.dataframe(df.head())
 
                   st.subheader("Merchant Map")
 
@@ -181,11 +212,7 @@ def main():
                   st.subheader("Unplotted area")
                   unplotted_fig = plot_unplotted_areas(df_mapped, boundary_polygon, min_lat, max_lat, min_lng, max_lng)
                   st.pyplot(unplotted_fig)
-
-                else:
-                  st.warning("No valid locations to map")
-
-
+        
         except Exception as e:
             st.error(f"Error processing file: {e}")
 
