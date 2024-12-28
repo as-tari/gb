@@ -15,19 +15,20 @@ from matplotlib.cm import get_cmap
 import streamlit.components.v1 as components
 
 
-def geocode_address(address, geolocator):
+def geocode_address(address, city, geolocator):
     """Geocodes an address using Nominatim with retry logic."""
     try:
-        location = geolocator.geocode(address, timeout=10)
+        full_address = f"{address}, {city}"  # Combine address and city
+        location = geolocator.geocode(full_address, timeout=10)
         if location:
             return location.latitude, location.longitude
         return None, None
     except (GeocoderTimedOut, GeocoderServiceError) as e:
-        print(f"Geocoding error for address '{address}': {e}. Retrying after a delay.")
+        print(f"Geocoding error for address '{full_address}': {e}. Retrying after a delay.")
         time.sleep(5)
-        return geocode_address(address, geolocator)  # Recursive retry
+        return geocode_address(address, city, geolocator)  # Recursive retry
     except Exception as e:
-        print(f"Geocoding error for address '{address}': {e}. Skipping address.")
+        print(f"Geocoding error for address '{full_address}': {e}. Skipping address.")
         return None, None
 
 def create_voronoi_polygons(points):
@@ -122,6 +123,7 @@ def main():
             st.dataframe(df.head())
 
             address_column = st.selectbox("Select Address Column", df.columns)
+            city_column = st.selectbox("Select City Column", df.columns)
             
             if st.button("Process Data & Map"):
 
@@ -130,7 +132,7 @@ def main():
 
                 # Geocode addresses and add lat/long columns
                 with st.spinner("Geocoding addresses..."):
-                    df['latitude'], df['longitude'] = zip(*df[address_column].apply(lambda addr: geocode_address(addr, geolocator)))
+                    df['latitude'], df['longitude'] = zip(*df.apply(lambda row: geocode_address(row[address_column], row[city_column], geolocator), axis=1))
 
                 st.success("Geocoding complete!")
                 st.write("Data with Coordinates:")
@@ -158,12 +160,12 @@ def main():
                   for _, row in df_mapped.iterrows():
                       folium.Marker([row['latitude'], row['longitude']], popup=row[address_column]).add_to(m)
                   
-                  st.components.v1.html(m._repr_html_(), height=450, width = 800)
+                  components.v1.html(m._repr_html_(), height=450, width = 800)
                 
                   # Create a heatmap
                   st.subheader("Merchant Density")
                   heatmap = create_heatmap(df_mapped)
-                  st.components.v1.html(heatmap._repr_html_(), height=450, width = 800)
+                  components.v1.html(heatmap._repr_html_(), height=450, width = 800)
                   
                   # Plot unplotted areas
                   st.subheader("Unplotted area")
