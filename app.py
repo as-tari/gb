@@ -14,12 +14,23 @@ import matplotlib
 from matplotlib.cm import get_cmap
 import streamlit.components as components
 import re
+from fuzzywuzzy import process, fuzz
 
 def clean_address(address):
     """Cleans up the address string by removing unnecessary punctuations and spaces."""
     address = re.sub(r'[^\w\s,]', '', address)  # Remove all punctuation except commas
     address = ' '.join(address.split())  # Remove extra whitespace
     return address
+
+def correct_typo(text, choices, threshold=70):
+    """Corrects typos in a text using fuzzy matching with a set of choices."""
+    if not text or not choices:
+        return text
+
+    best_match, score = process.extractOne(text, choices, scorer=fuzz.ratio)
+    if score >= threshold:
+        return best_match
+    return text
 
 def geocode_address(address, city, geolocator, state=None, postal_code=None, max_retries=3):
     """Geocodes an address with retry logic and optional city, state, and postal code."""
@@ -163,10 +174,19 @@ def main():
                 with st.spinner("Geocoding addresses..."):
                   # Geocode addresses and add lat/long columns
                   geocoded_results = []
+                  all_cities = df[city_column].dropna().unique().tolist() # Get all unique cities for typo checking
                   for index, row in df.iterrows():
+                    city = row[city_column]
+                    address = row[address_column]
+                    
+                    # Try to fix address typos
+                    address = correct_typo(address, [address], threshold=80)
+                    #Try to fix city typos
+                    city = correct_typo(city, all_cities)
+                    
                     state = row[state_column] if state_column != 'None' else None
                     postal_code = row[postal_code_column] if postal_code_column != 'None' else None
-                    lat, lng = geocode_address(row[address_column], row[city_column], geolocator, state, postal_code)
+                    lat, lng = geocode_address(address, city, geolocator, state, postal_code)
                     geocoded_results.append((lat, lng))
                   df['latitude'], df['longitude'] = zip(*geocoded_results)
                   
