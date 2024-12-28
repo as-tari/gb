@@ -12,13 +12,16 @@ import matplotlib.pyplot as plt
 from shapely.geometry import Polygon, Point
 import matplotlib
 from matplotlib.cm import get_cmap
-import streamlit.components as components # Corrected Import
+import streamlit.components as components
+import re
 
 
 def geocode_address(address, city, geolocator):
     """Geocodes an address using Nominatim with retry logic."""
+    
     try:
-        full_address = f"{address}, {city}"  # Combine address and city
+        full_address = f"{address}, {city}"
+        full_address = re.sub(r'[^\w\s,]', '', full_address) #remove punctuation
         location = geolocator.geocode(full_address, timeout=10)
         if location:
             return location.latitude, location.longitude
@@ -26,11 +29,11 @@ def geocode_address(address, city, geolocator):
     except (GeocoderTimedOut, GeocoderServiceError) as e:
         print(f"Geocoding error for address '{full_address}': {e}. Retrying after a delay.")
         time.sleep(5)
-        return geocode_address(address, city, geolocator)  # Recursive retry
+        return geocode_address(address, city, geolocator)
     except Exception as e:
         print(f"Geocoding error for address '{full_address}': {e}. Skipping address.")
         return None, None
-
+    
 def create_voronoi_polygons(points):
   """
     Generates voronoi polygons for given points.
@@ -135,6 +138,13 @@ def main():
                     df['latitude'], df['longitude'] = zip(*df.apply(lambda row: geocode_address(row[address_column], row[city_column], geolocator), axis=1))
 
                 st.success("Geocoding complete!")
+                
+                # Handle un-geocoded locations
+                df_unmapped = df[df['latitude'].isna()]
+                if not df_unmapped.empty:
+                  st.warning("The following addresses could not be geocoded:")
+                  st.dataframe(df_unmapped)
+                
                 st.write("Data with Coordinates:")
                 st.dataframe(df.head())
 
